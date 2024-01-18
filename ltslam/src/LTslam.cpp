@@ -47,6 +47,7 @@ void LTslam::writeAllSessionsTrajectories(std::string _postfix = "")
     // write
     for(auto& _session_info: parsed_poses) {
         int session_idx = _session_info.first;
+        auto& session = sessions_[session_idx];
 
     	std::string filename_local = save_directory_ + session_names[session_idx] + "_local_" + _postfix + ".txt";
     	std::string filename_central = save_directory_ + session_names[session_idx] + "_central_" + _postfix + ".txt";
@@ -61,6 +62,45 @@ void LTslam::writeAllSessionsTrajectories(std::string _postfix = "")
 
             gtsam::Pose3 pose_central = anchor_transform * _pose; // se3 compose (oplus) 
             writePose3ToStream(stream_central, pose_central);
+        }
+
+        for(auto& _session_info: parsed_poses) {
+            int session_idx = _session_info.first;
+            auto& session = sessions_[session_idx];
+
+            // Create a new point cloud to accumulate all transformed point clouds
+            pcl::PointCloud<PointType>::Ptr accumulatedCloud(new pcl::PointCloud<PointType>);
+
+            for(size_t i = 0; i < session.cloudKeyFrames.size(); ++i) {
+                if (i < _session_info.second.size()) {
+                    auto& _pose = _session_info.second[i];
+                    pcl::PointCloud<PointType>::Ptr cloud = session.cloudKeyFrames[i];
+                    if (!cloud || cloud->empty()) {
+                        continue; // Skip if no point cloud is available
+                    }
+
+                    // Transform the point cloud using the pose
+                    pcl::PointCloud<PointType>::Ptr transformed_cloud(new pcl::PointCloud<PointType>);
+                    Eigen::Matrix4d transform = _pose.matrix(); // Convert gtsam::Pose3 to Eigen::Affine3f
+                    pcl::transformPointCloud(*cloud, *transformed_cloud, transform);
+
+                    // Accumulate the transformed point cloud
+                    *accumulatedCloud += *transformed_cloud;
+                }
+            }
+
+            pcl::PointCloud<PointType>::Ptr downsampledCloud(new pcl::PointCloud<PointType>);
+            pcl::VoxelGrid<PointType> sor;
+            sor.setInputCloud(accumulatedCloud);
+            sor.setLeafSize(0.1f, 0.1f, 0.1f); // Set the voxel grid size
+            sor.filter(*downsampledCloud);
+
+            // Save the accumulated point cloud
+            std::stringstream ss;
+            ss << save_directory_ << "accumulated_cloud_" << session_names[session_idx] << _postfix << ".pcd";
+            pcl::io::savePCDFileBinary(ss.str(), *accumulatedCloud);
+            std::cout << "saving accumulated_cloud_" << session_names[session_idx] << std::endl;
+
         }
     }
 

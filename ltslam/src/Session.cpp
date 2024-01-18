@@ -218,7 +218,7 @@ void Session::loadSessionScanContextDescriptors()
 
 void Session::loadSessionGraph() 
 {
-    std::string posefile_path = session_dir_path_ + "/singlesession_posegraph.g2o";
+    std::string posefile_path = session_dir_path_ + "/graph/graph.g2o";
 
     std::ifstream posefile_handle (posefile_path);
     std::string strOneLine;
